@@ -119,9 +119,7 @@ func HandleOutgoing(conn net.Conn, done chan <- struct{}) {
 	input := bufio.NewScanner(os.Stdin)
 	for input.Scan() {
 		io.WriteString(conn, uname.String()+input.Text()+"\n")
-		fmt.Println("At end of loop")
 	}
-	fmt.Println("Leaving outgoing function")
 	done <- struct{}{}
 }
 
