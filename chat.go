@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"bufio"
+	"errors"
 )
 
 const (
@@ -15,12 +16,78 @@ const (
 )
 
 type User struct {
-	username string
+	hostname string // may allow users to set their own username instead
 	ip net.IP
 	server bool // this may be unnecessary
 }
 
+func (u *User) String() string {
+	ipStr := string([]byte(u.ip))
+	return fmt.Sprint(u.hostname, "@", ipStr, ": ")
+}
+
+// This is a non-essential function, so just
+// log errors and keep the program going
+func ConfigureUser() (user *User) {
+	user = &User{
+		hostname: "Anonymous",
+		ip: []byte("0.0.0.0"),
+		server: false,
+	}
+
+	// Configure host name
+	hn, err := os.Hostname()
+	if err != nil {
+		log.Println(err)
+	}
+	user.hostname = hn
+
+	// Configure external IP address
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp == 0 {
+			continue // interface down
+		}
+		if iface.Flags&net.FlagLoopback != 0 {
+			continue // loopback interface
+		}
+		addrs, err := iface.Addrs()
+		if err != nil {
+			log.Println(err)
+			return
+		}
+		for _, addr := range addrs {
+			var ip net.IP
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ip = v.IP
+			case *net.IPAddr:
+				ip = v.IP
+			}
+			if ip == nil || ip.IsLoopback() {
+				continue
+			}
+			ip = ip.To4()
+			if ip == nil {
+				continue // not an ipv4 address
+			}
+
+			user.ip = []byte(ip.String())
+			return
+		}
+	}
+
+	log.Println(errors.New("are you connected to the network?"))
+	return
+}
+
 func HandleAsServer(conn net.Conn) {
+	uname := ConfigureUser()
+	uname.server = true
 	fmt.Println("Client has successfully connected")
 	_, err := io.WriteString(conn, "You have connected to the server\n")
 	if err != nil {
@@ -36,29 +103,35 @@ func HandleAsServer(conn net.Conn) {
 
 func HandleIncoming(conn net.Conn, done chan <- struct{}) {
 	defer conn.Close()
-	input := bufio.NewScanner(conn)
-	for input.Scan() {
-		fmt.Println(input.Text())
-	}
+	io.Copy(os.Stdout, conn)
+	//input := bufio.NewScanner(conn)
+	//input.Split(bufio.ScanLines)
+	//for input.Scan() {
+	//	fmt.Println(input.Text())
+	//	fmt.Println("Received text from other")
+	//}
 	done <- struct{}{}
 }
 
 func HandleOutgoing(conn net.Conn, done chan <- struct{}) {
 	defer conn.Close()
-	io.Copy(conn, os.Stdin)
+	uname := ConfigureUser()
+	input := bufio.NewScanner(os.Stdin)
+	for input.Scan() {
+		io.WriteString(conn, uname.String()+input.Text()+"\n")
+		fmt.Println("At end of loop")
+	}
+	fmt.Println("Leaving outgoing function")
 	done <- struct{}{}
 }
 
 func main() {
 	listen := flag.Bool("listen", false, "set to true when instance acts as server")
-	// username := flag.String("username", "anonymous", "provides the other part with your identity")
 	flag.Parse()
 	connIP := net.ParseIP(flag.Arg(0)).String()
 	if connIP == "" {
 		log.Fatal("invalid IP address given as argument")
 	}
-
-	fmt.Println(connIP)
 
 	if *listen {
 		l, err := net.Listen("tcp", connIP+port)
