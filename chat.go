@@ -86,8 +86,6 @@ func ConfigureUser() (user *User) {
 }
 
 func HandleAsServer(conn net.Conn) {
-	uname := ConfigureUser()
-	uname.server = true
 	fmt.Println("Client has successfully connected")
 	_, err := io.WriteString(conn, "You have connected to the server\n")
 	if err != nil {
