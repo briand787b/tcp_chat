@@ -103,9 +103,6 @@ func HandleAsServer(conn net.Conn) {
 
 func HandleIncoming(conn net.Conn, done chan <- struct{}) {
 	defer conn.Close()
-	// io.Copy(os.Stdout, conn)
-
-
 	uname := ConfigureUser()
 	input := bufio.NewScanner(conn)
 	input.Split(bufio.ScanLines)
@@ -119,7 +116,6 @@ func HandleIncoming(conn net.Conn, done chan <- struct{}) {
 func HandleOutgoing(conn net.Conn, done chan <- struct{}) {
 	defer conn.Close()
 	uname := ConfigureUser()
-	// fmt.Print(uname)
 	input := bufio.NewScanner(os.Stdin)
 	for input.Scan() {
 		io.WriteString(conn, uname.String()+input.Text()+"\n")
